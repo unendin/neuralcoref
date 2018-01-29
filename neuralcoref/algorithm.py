@@ -78,8 +78,8 @@ class Coref:
         if nlp is None:
             print("Loading spacy model")
             try:
-                spacy.info('en_core_web_sm')
-                model = 'en_core_web_sm'
+                spacy.info('en_core_web_lg')
+                model = 'en_core_web_lg'
             except IOError:
                 print("No spacy 2 model detected, using spacy1 'en' model")
                 model = 'en'
