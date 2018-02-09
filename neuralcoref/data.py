@@ -15,28 +15,17 @@ except ImportError: # will be 3.x series
 import spacy
 import numpy as np
 
+from . import config
+
 #########################
 ####### UTILITIES #######
 #########################
-
-NO_COREF_LIST = ["i", "me", "my", "you", "your"]
-
-MENTION_TYPE = {"PRONOMINAL": 0, "NOMINAL": 1, "PROPER": 2, "LIST": 3}
-MENTION_LABEL = {0: "PRONOMINAL", 1: "NOMINAL", 2: "PROPER", 3: "LIST"}
-
-PROPERS_TAGS = ["NN", "NNS", "NNP", "NNPS"]
-ACCEPTED_ENTS = ["PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT", "EVENT", "WORK_OF_ART", "LAW", "LANGUAGE"]
-WHITESPACE_PATTERN = r"\s+|_+"
-UNKNOWN_WORD = "*UNK*"
-NORMALIZE_DICT = {"/.": ".", "/?": "?", "-LRB-": "(", "-RRB-": ")",
-                  "-LCB-": "{", "-RCB-": "}", "-LSB-": "[", "-RSB-": "]"}
-DISTANCE_BINS = list(range(5)) + [5]*3 + [6]*8 + [7]*16 +[8]*32
 
 def encode_distance(d):
     ''' Encode an integer as a (bined) one-hot numpy array '''
     dist_vect = np.zeros((11,))
     if d < 64:
-        dist_vect[DISTANCE_BINS[d]] = 1
+        dist_vect[config.DISTANCE_BINS[d]] = 1
     else:
         dist_vect[9] = 1
     dist_vect[10] = min(float(d), 64.0) / 64.0
@@ -50,7 +39,8 @@ def extract_mentions_spans(doc, use_no_coref_list=True, debug=False):
     '''
     Extract potential mentions from a spacy parsed Doc
     '''
-    nouns_or_prp = re.compile(r"N.*|PRP.*|DT")
+    nouns_or_prp = ["NN", "NNP", "NNPS", "NNS", "PRP", "PRP$", "DT"]
+    prp = ["PRP", "PRP$"]
     det_or_comp = ["det", "compound", "appos"]
     nsubj_or_dep = ["nsubj", "dep"]
     conj_punct_pos = ["CCONJ", "PUNCT"]
@@ -69,30 +59,27 @@ def extract_mentions_spans(doc, use_no_coref_list=True, debug=False):
     for c in doc:
         if debug: print("🚧 span search:", c, "head:", c.head, "tag:", c.tag_, "pos:", c.pos_, "dep:", c.dep_)
     # Named entities
-    mentions_spans = list(ent for ent in doc.ents if ent.label_ in ACCEPTED_ENTS)
+    mentions_spans = list(ent for ent in doc.ents if ent.label_ in config.ACCEPTED_ENTS)
     if debug: print("==-- ents:", list(((ent, ent.label_) for ent in mentions_spans)))
 
     # Pronouns and Noun phrases
     for token in doc:
         if debug: print("🚀 tok:", token, "tok.tag_", token.tag_)
-
-        if use_no_coref_list and token.lower_ in NO_COREF_LIST:
+        if use_no_coref_list and token.lower_ in config.NO_COREF_LIST:
             if debug: print("token in no_coref_list")
             continue
-        if not nouns_or_prp.match(token.tag_) or token.dep_ in det_or_comp:
+        if token.tag_ not in nouns_or_prp or token.dep_ in det_or_comp:
             if debug: print("not pronoun or no right dependency")
             continue
 
         # pronoun
-        if re.match(r"PRP.*", token.tag_):
+        if token.tag in prp:
             if debug: print("PRP")
             endIdx = token.i + 1
-
             span = doc[token.i: endIdx]
             if not any((ent.start <= span.start and span.end <= ent.end for ent in doc.ents)):
                 if debug: print("==-- not in entity store:", span)
                 mentions_spans.append(span)
-
             # when pronoun is a part of conjunction (e.g., you and I)
             if token.n_rights > 0 or token.n_lefts > 0:
                 span = doc[token.left_edge.i : token.right_edge.i+1]
@@ -207,7 +194,7 @@ class Mention(spacy.tokens.Span):
     @property
     def content_words(self):
         ''' Returns an iterator of nouns/proper nouns in the Mention '''
-        return (tok.lower_ for tok in self if tok.tag_ in PROPERS_TAGS)
+        return (tok.lower_ for tok in self if tok.tag_ in config.PROPERS_TAGS)
 
     @property
     def embedding(self):
@@ -218,14 +205,14 @@ class Mention(spacy.tokens.Span):
         conj = ["CC", ","]
         prp = ["PRP", "PRP$"]
         proper = ["NNP", "NNPS"]
-        if any(t.tag_ in conj and t.ent_type_ not in ACCEPTED_ENTS for t in self):
-            mention_type = MENTION_TYPE["LIST"]
+        if any(t.tag_ in conj and t.ent_type_ not in config.ACCEPTED_ENTS for t in self):
+            mention_type = config.MENTION_TYPE["LIST"]
         elif self.root.tag_ in prp:
-            mention_type = MENTION_TYPE["PRONOMINAL"]
-        elif self.root.ent_type_ in ACCEPTED_ENTS or self.root.tag_ in proper:
-            mention_type = MENTION_TYPE["PROPER"]
+            mention_type = config.MENTION_TYPE["PRONOMINAL"]
+        elif self.root.ent_type_ in config.ACCEPTED_ENTS or self.root.tag_ in proper:
+            mention_type = config.MENTION_TYPE["PROPER"]
         else:
-            mention_type = MENTION_TYPE["NOMINAL"]
+            mention_type = config.MENTION_TYPE["NOMINAL"]
         return mention_type
 
     def _doc_sent_number(self):
@@ -276,7 +263,7 @@ class Speaker:
             self.speaker_names = speaker_names
         else:
             self.speaker_names = str(speaker_names)
-        self.speaker_tokens = [tok.lower() for s in self.speaker_names for tok in re.split(WHITESPACE_PATTERN, s)]
+        self.speaker_tokens = [tok.lower() for s in self.speaker_names for tok in re.split(config.WHITESPACE_PATTERN, s)]
 
     def __str__(self):
         return '{} <names> {}'.format(self.speaker_id, self.speaker_names)
@@ -291,7 +278,7 @@ class Speaker:
 
     def contain_string(self, string):
         ''' Does the Speaker names contains a string'''
-        return any(re.sub(WHITESPACE_PATTERN, "", string.lower()) == re.sub(WHITESPACE_PATTERN, "", s.lower())
+        return any(re.sub(config.WHITESPACE_PATTERN, "", string.lower()) == re.sub(config.WHITESPACE_PATTERN, "", s.lower())
                    for s in self.speaker_names)
 
     def contain_token(self, token):
@@ -323,10 +310,10 @@ class EmbeddingExtractor:
     def __init__(self, model_path):
         self.average_mean, self.static_embeddings, self.static_voc = self.load_embeddings_from_file(model_path + "static_word")
         _, self.tuned_embeddings, self.tuned_voc = self.load_embeddings_from_file(model_path + "tuned_word")
-        self.fallback = self.static_embeddings.get(UNKNOWN_WORD)
+        self.fallback = self.static_embeddings.get(config.UNKNOWN_WORD)
 
-        self.shape = self.static_embeddings[UNKNOWN_WORD].shape
-        shape2 = self.tuned_embeddings[UNKNOWN_WORD].shape
+        self.shape = self.static_embeddings[config.UNKNOWN_WORD].shape
+        shape2 = self.tuned_embeddings[config.UNKNOWN_WORD].shape
         assert self.shape == shape2
 
     @staticmethod
@@ -345,8 +332,8 @@ class EmbeddingExtractor:
     def normalize_word(w):
         if w is None:
             return "<missing>"
-        elif w.lower_ in NORMALIZE_DICT:
-            return NORMALIZE_DICT[w.lower_]
+        elif w.lower_ in config.NORMALIZE_DICT:
+            return config.NORMALIZE_DICT[w.lower_]
         return w.lower_.replace("\\d", "0")
 
     def get_document_embedding(self, utterances_list):
@@ -366,7 +353,7 @@ class EmbeddingExtractor:
                 word = norm_word
                 embed = self.static_embeddings.get(norm_word)
             else:
-                word = UNKNOWN_WORD
+                word = config.UNKNOWN_WORD
                 embed = self.fallback
         else:
             if norm_word in self.tuned_embeddings:
@@ -376,7 +363,7 @@ class EmbeddingExtractor:
                 word = norm_word
                 embed = self.static_embeddings.get(norm_word)
             else:
-                word = UNKNOWN_WORD
+                word = config.UNKNOWN_WORD
                 embed = self.fallback
         return word, embed
 
