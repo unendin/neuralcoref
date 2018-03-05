@@ -1,21 +1,21 @@
 # coding: utf8
 """data models and pre-processing for the coref algorithm"""
 
-from __future__ import unicode_literals
-from __future__ import print_function
+
+
 
 import re
 from six import string_types, integer_types
 
 try:
-    from itertools import izip_longest as zip_longest
+    from itertools import zip_longest as zip_longest
 except ImportError: # will be 3.x series
     from itertools import zip_longest
 
 import spacy
 import numpy as np
 
-from . import config
+from neuralcoref import config
 
 #########################
 ####### UTILITIES #######
@@ -93,7 +93,7 @@ def extract_mentions_spans(doc, use_no_coref_list=True, debug=False):
         if token.lower_ == "'s":
             if debug: print("'s detected")
             h = token.head
-            while h.head is not h:
+            while h.head.i != h.i:
                 if debug: print("token head", h, h.dep_, "head:", h.head)
                 if h.dep_ == "nsubj":
                     minchild_idx = min((c.left_edge.i for c in doc if c.head == h.head and c.dep_ in nsubj_or_dep),
@@ -152,7 +152,8 @@ class Mention(spacy.tokens.Span):
     '''
     A mention (possible anaphor) inherite from spacy Span class with additional informations
     '''
-    def __new__(cls, span, mention_index, utterance_index, utterance_start_sent, speaker=None, gold_label=None, *args, **kwargs):
+    def __new__(cls, span, mention_index, utterance_index, utterance_start_sent, speaker=None, gold_label=None,
+                *args, **kwargs):
         # We need to override __new__ see http://cython.readthedocs.io/en/latest/src/userguide/special_methods.html
         obj = spacy.tokens.Span.__new__(cls, span.doc, span.start, span.end, *args, **kwargs)
         return obj
@@ -522,7 +523,7 @@ class Data:
             try:
                 doc = self.nlp(utterance)
             except IndexError:
-                doc = self.nlp(u" ")
+                doc = self.nlp(" ")
                 if self.debug: print("Empty string")
             if speaker_id not in self.speakers:
                 speaker_name = speakers_names.get(speaker_id, None) if speakers_names else None
@@ -628,7 +629,7 @@ class Data:
                 if mention.utterance_index in self.last_utterances_loaded:
                     yield i
         else:
-            iterator = range(len(self.mentions))
+            iterator = list(range(len(self.mentions)))
             for i in iterator:
                 yield i
 
@@ -643,7 +644,7 @@ class Data:
                 its antecedent when there is a proper noun match
         '''
         if mentions is None:
-            mentions = range(len(self.mentions))
+            mentions = list(range(len(self.mentions)))
 
         word_to_mentions = {}
         for i in mentions:

@@ -3,7 +3,7 @@
 """Coreference resolution server example.
 A simple server serving the coreference system.
 """
-from __future__ import unicode_literals
+
 
 import json
 import sys
@@ -14,7 +14,7 @@ from neuralcoref.algorithm import Coref
 from neuralcoref.data import MENTION_LABEL
 
 is_python2 = int(sys.version[0]) == 2
-unicode_ = unicode if is_python2 else str
+unicode_ = str if is_python2 else str
 
 class CorefWrapper(Coref):
     def parse_and_get_mentions(self, utterances, utterances_speakers_id=None, context=None,
@@ -33,7 +33,7 @@ class CorefWrapper(Coref):
                           'type':           MENTION_LABEL[mention.mention_type],
                           'text':           mention.text} for mention in self.data.mentions]
         json_coreferences = [{'original': original.text,
-                              'resolved': resolved.text} for original, resolved in coreferences.items()]
+                              'resolved': resolved.text} for original, resolved in list(coreferences.items())]
         scores = self.get_scores()
         return {"coreferences": json_coreferences,
                 "mentions": json_mentions,
@@ -61,8 +61,8 @@ class AllResource(object):
             text_speaker = req.get_param("textspeaker")
             context_speakers = req.get_param_as_list("contextspeakers")
             speakers_names = req.get_param_as_dict("speakersnames")
-            print("text", text)
-            print("context", context)
+            print(("text", text))
+            print(("context", context))
             self.coref.parse_and_get_mentions(text, text_speaker,
                                               context, context_speakers,
                                               speakers_names)

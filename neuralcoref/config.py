@@ -1,3 +1,9 @@
+MAX_FOLLOW_UP =45
+GREEDYNESS=0.49
+MAX_DIST=38
+MAX_DIST_MATCH=200
+SPACY_MODEL = 'en_core_web_lg'
+
 NO_COREF_LIST = ["i", "me", "my", "you", "your"]
 
 MENTION_TYPE = {"PRONOMINAL": 0, "NOMINAL": 1, "PROPER": 2, "LIST": 3}
